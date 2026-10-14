@@ -1,0 +1,13 @@
+# 機密（勿提交）
+.env
+users.json
+start_bot.ps1
+# 執行期
+*.log
+__pycache__/
+*.pyc
+.venv/
+venv/
+# 本機
+.claude/settings.local.json
+*.xlsx

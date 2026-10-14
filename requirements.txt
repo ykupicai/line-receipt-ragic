@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+line-bot-sdk
+anthropic
+requests
+python-dotenv
+openpyxl
