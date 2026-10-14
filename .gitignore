@@ -1,7 +1,8 @@
 # 機密（勿提交）
 .env
 users.json
-start_bot.ps1
+ngrok_token.local
+*.bak_*
 # 執行期
 *.log
 __pycache__/

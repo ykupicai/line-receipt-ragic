@@ -19,7 +19,7 @@
   `references\台灣發票報帳對照.md`。
 - 健康檢查端點:`GET http://localhost:8000/` 回 `{"status":"ok"}`;`POST /callback` 無簽章應回 400。
 - log:`<code>\uvicorn.out.log`、`uvicorn.err.log`、`ngrok.out.log`、`ngrok.err.log`(每次重啟會被覆寫)。
-- 版控:**目前沒有 git**(2026-10-14 確認)。要納入版控前必須先處理 `start_bot.ps1` 的明文 ngrok token 與 `users.json` 的個人金鑰,見「慣例與安全」。
+- 版控:`<code>` 為 git repo(2026-10-14 建立,僅本機、無遠端)。排除:`.env`、`users.json`、`ngrok_token.local`、`*.log`、`*.xlsx`、`.venv`,見「慣例與安全」。
 - 自動化測試:無。驗證方式見本檔各節的「驗證」與「部署」。
 
 ### LINE 互動方式(問答式,目前)
@@ -100,7 +100,7 @@
   指定 --config 時又「cannot find path」——登入初期 %LOCALAPPDATA% 設定檔讀不到)。
   最終解法:start_bot.ps1 的 ngrok 直接帶 `--authtoken <token>`(不依賴任何設定檔),
   並用 while 迴圈重試最多 5 次(每次間隔 8s),防登入初期環境未就緒。
-  ⚠️ 代價:**token 以明文寫在 `start_bot.ps1`**。這支腳本不可外傳、不可提交版控;看 ngrok 程序命令列時 token 也會出現,貼出前要遮蔽。
+  2026-10-14 起 token 改存同資料夾的 **`ngrok_token.local`**(單行純文字,已排除在版控外),`start_bot.ps1` 從它讀取後照樣以 `--authtoken` 帶入;腳本本身已進版控。換 token 時只改這個檔。看 ngrok 程序命令列時 token 仍會出現,貼出前要遮蔽。
 - 驗證開機啟動:停掉 uvicorn+ngrok,跑開機資料夾的 LineReceiptBot.vbs,確認**兩個**程序都起來、
   且固定網址 POST /callback 回 400(直達程式)。注意:此模擬從已登入 session 跑,
   無法重現「真實重開機登入初期環境未就緒」,真正的驗證只能靠使用者實際重開機。
@@ -230,8 +230,7 @@ Python 3.10+ / FastAPI + uvicorn / line-bot-sdk v3 / anthropic SDK / requests / 
 
 ## 慣例與安全
 - 所有金鑰只放 `.env`,絕不寫進程式或 commit;`.env` 已列入 `.gitignore`。
-  **例外(現況,待改善)**:`start_bot.ps1` 寫死 ngrok authtoken、`users.json` 存每人 Ragic 金鑰明碼。
-  未來要 git init 時,這兩個檔必須排除(或先把 token 改由環境變數讀取),log 與 `專案訂單查詢.xlsx` 也要排除。
+  **例外**:ngrok authtoken 存 `<code>\ngrok_token.local`、每人 Ragic 金鑰明碼存 `users.json`——兩者都已排除在版控外,不可外傳。
 - 先前曾在聊天中貼過一批金鑰,視為已外流,務必到各平台 revoke/重發,新金鑰只放 `.env`。
 - Claude Code 自身登入(Claude 訂閱或 Console 額度)與 `.env` 的 `ANTHROPIC_API_KEY`(機器人辨識用)是兩回事,別混用。
 
