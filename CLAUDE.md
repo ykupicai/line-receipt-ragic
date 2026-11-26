@@ -57,13 +57,32 @@
       (原「表單無附件欄位、不傳照片」已被 2026/09 表單改版推翻,現在照片進每一列。)
       欄位編號取得法見 ragic_fields.py 開頭(用「空更新回應以編號為鍵」這招,不需設計權限)。
       已實測建單(2026/09/03,見「表單改版對應」「追加明細」兩節的驗證)。
-- [x] 常駐部署:固定 webhook 網址 + 開機自動啟動(見下方「部署」)。
+- [x] 常駐部署:固定 webhook 網址;2026-11-26 起改由 Synology NAS 的 Docker 常駐(見「NAS 部署」),Windows 常駐已停用。
 - [x] 多人身分:首次登記(users.py / users.json),每人一份申請人/職稱/上班地點/團隊。
 - [x] 出差/代墊款分流:指令「出差」/「代墊款」切換,代墊款寫入 invoice-form/2(見下方)。
 - [x] 確認按鈕:已改 LINE 快速回覆鈕(見「LINE 互動方式」的 `_buttons_for`)。
 - [ ] 階段 4:推廣到全公司(目前 users.json 登記 3 人)。
 
-## 部署(常駐)
+## NAS 部署(2026-11-26 起現行,取代下方 Windows 常駐)
+- **正式服務跑在 Synology DS1618+(`YKU-TN`,192.168.1.134,DSM 7.1.1、Docker 20.10.3)**,兩個容器:
+  `line-receipt-bot`(uvicorn :8000,單一 worker)與 `line-receipt-ngrok`(固定網域 `wireless-default-shelf.ngrok-free.dev`,只帶 `NGROK_AUTHTOKEN`),
+  同屬 docker network `line-receipt-net`,皆 `--restart unless-stopped`(NAS 重開機自動拉起)。LINE Webhook 網址不變。
+- NAS 路徑:`/volume1/docker/line-receipt-bot/`(Windows 看:`\\192.168.1.134\docker\line-receipt-bot`,docker 共用資料夾僅管理員)。
+  `deploy\bot.env`＝全部金鑰(LINE、`ANTHROPIC_API_KEY`、`RAGIC_API_KEY`、`RAGIC_*`、`NGROK_AUTHTOKEN`,不進版控);
+  `deploy\data\users.json`＝使用者資料(容器內 `USERS_FILE=/data/users.json`,**須掛資料夾**,單檔掛載會讓 `os.replace` 失敗)。
+- **DSM 7.1.1 的 Docker 沒有 compose**,用 `docker run`(repo 內 `deploy\docker-compose.yml` 供升到 DSM 7.2 Container Manager 後使用)。
+  更新程式:Windows 用 robocopy 把 repo 覆蓋到 NAS(排除 `.venv .git .env users.json ngrok_token.local *.log *.xlsx *.ps1`)→
+  SSH(管理員帳號 `yku-lca`,用完到「控制台→終端機和 SNMP」關閉 SSH)執行:
+  `cd /volume1/docker/line-receipt-bot && sudo docker build -f deploy/Dockerfile -t line-receipt-bot .`,
+  再 `sudo docker rm -f line-receipt-bot` 後重跑 bot 的 `docker run`(指令:`--network line-receipt-net --env-file deploy/bot.env -e USERS_FILE=/data/users.json -e TZ=Asia/Taipei -v /volume1/docker/line-receipt-bot/deploy/data:/data --restart unless-stopped`,另加 health-cmd)。
+  換金鑰:改 `bot.env` → `sudo docker restart line-receipt-bot`(只在啟動時讀環境變數)。
+- 看 log:`sudo docker logs -f line-receipt-bot`(ngrok 容器預設不輸出 log,空白正常)。驗證:POST 無簽章 `/callback` 回 400、LINE 傳單據走完流程。
+- **Windows 端已停用(備援)**:看門狗排程 `LineBotWatchdog` 已 Disable、開機 `LineReceiptBot.vbs` 備份在 `<code>\deploy\_windows_backup\`、本機 `.env`/使用者變數的金鑰仍在。
+  ⚠ ngrok 免費固定網域同時只能一個 agent:**NAS 與 Windows 不可同時啟動**。
+  退回 Windows:NAS 執行 `sudo docker stop line-receipt-ngrok line-receipt-bot` → Windows 執行 `start_bot.ps1`、`Enable-ScheduledTask LineBotWatchdog`、把 vbs 放回開機資料夾。
+- 備份:`deploy\data\users.json` 是唯一使用者資料,要納入 NAS 備份。
+
+## 部署(舊:Windows 常駐,2026-11-26 起已停用,留作備援參考)
 - 服務 = uvicorn(:8000)+ ngrok(固定網域)兩個程序,跑在使用者這台 Windows。
 - 固定 webhook URL:`https://wireless-default-shelf.ngrok-free.dev/callback`(ngrok 免費固定網域,不會變)。
 - 開機自動啟動:`start_bot.ps1`(會在沒在跑時才啟動 uvicorn/ngrok),

@@ -9,7 +9,8 @@ import json
 import os
 import threading
 
-_PATH = os.path.join(os.path.dirname(__file__), "users.json")
+# 容器部署時用 USERS_FILE 指到掛載的資料夾(須掛資料夾,單檔掛載會讓 os.replace 失敗);沒設則維持原位置
+_PATH = os.environ.get("USERS_FILE") or os.path.join(os.path.dirname(__file__), "users.json")
 _lock = threading.Lock()
 _users: dict[str, dict] = {}
 

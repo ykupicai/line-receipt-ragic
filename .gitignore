@@ -2,6 +2,8 @@
 .env
 users.json
 ngrok_token.local
+deploy/bot.env
+deploy/data/
 *.bak_*
 # 執行期
 *.log
@@ -12,3 +14,4 @@ venv/
 # 本機
 .claude/settings.local.json
 *.xlsx
+deploy/_windows_backup/

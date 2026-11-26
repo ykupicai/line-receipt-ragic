@@ -1,0 +1,27 @@
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: line-receipt-bot
+    env_file: bot.env            # 金鑰都放這個檔(不進版控),格式見 bot.env.example
+    environment:
+      USERS_FILE: /data/users.json
+      TZ: Asia/Taipei
+    volumes:
+      - ./data:/data             # users.json 存這裡(須是資料夾掛載)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/',timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: line-receipt-ngrok
+    env_file: bot.env            # 內含 NGROK_AUTHTOKEN
+    command: ["http", "--url=https://wireless-default-shelf.ngrok-free.dev", "bot:8000"]
+    depends_on:
+      - bot
+    restart: unless-stopped
