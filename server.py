@@ -472,7 +472,7 @@ def _offer_recent(reply_token: str, user_id: str, profile: dict | None):
         print("[追加列近期單失敗]\n" + traceback.format_exc(), flush=True)
     if not recs:
         reply(reply_token,
-              "查不到你近期的單號。請直接貼上要追加的費用單號(例:BS-20260903004),或回【取消】。",
+              "查不到你「尚未送出簽核或被退回」的單。已送出簽核的單不能追加;若要追加,請直接貼上單號(例:BS-20260903004),或回【取消】。",
               user_id)                     # awaiting_no 仍在 → 自動附「取消」鈕
         return
     lines, items = [], []
@@ -482,7 +482,7 @@ def _offer_recent(reply_token: str, user_id: str, profile: dict | None):
         lines.append(f"{i}. {no}({kind}) {r.get('project') or '—'}")
         items.append(QuickReplyItem(action=MessageAction(label=no[:20], text=no)))
     items.append(QuickReplyItem(action=MessageAction(label="✖️ 取消", text="取消")))
-    body = "選一張要追加的單(或直接貼單號):\n" + "\n".join(lines)
+    body = "選一張要追加的單(僅列尚未送出簽核或被退回的單,或直接貼單號):\n" + "\n".join(lines)
     reply(reply_token, body, user_id, quick=QuickReply(items=items))
 
 
@@ -497,6 +497,11 @@ def _start_append(reply_token: str, user_id: str, expense_no: str, profile: dict
         reply(reply_token,
               f"查無單號 {expense_no}。\n請確認號碼正確(BT 開頭=差旅費、BS=代墊款),"
               "且是你的金鑰看得到的單。", user_id)
+        return
+    if not rec.get("can_append"):
+        reply(reply_token,
+              f"單號 {rec['expense_no']} 目前是「{rec.get('approval') or '已送出簽核'}」,"
+              "已送出簽核的單不能追加。請改選尚未送出或被退回的單,或回【取消】。", user_id)
         return
     _clear(user_id)                      # 清掉舊暫存後再設定追加目標
     append_target[user_id] = rec

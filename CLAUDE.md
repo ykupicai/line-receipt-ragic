@@ -72,9 +72,9 @@
   `deploy\data\users.json`＝使用者資料(容器內 `USERS_FILE=/data/users.json`,**須掛資料夾**,單檔掛載會讓 `os.replace` 失敗)。
 - **DSM 7.1.1 的 Docker 沒有 compose**,用 `docker run`(repo 內 `deploy\docker-compose.yml` 供升到 DSM 7.2 Container Manager 後使用)。
   更新程式:Windows 用 robocopy 把 repo 覆蓋到 NAS(排除 `.venv .git .env users.json ngrok_token.local *.log *.xlsx *.ps1`)→
-  SSH(管理員帳號 `yku-lca`,用完到「控制台→終端機和 SNMP」關閉 SSH)執行:
-  `cd /volume1/docker/line-receipt-bot && sudo docker build -f deploy/Dockerfile -t line-receipt-bot .`,
-  再 `sudo docker rm -f line-receipt-bot` 後重跑 bot 的 `docker run`(指令:`--network line-receipt-net --env-file deploy/bot.env -e USERS_FILE=/data/users.json -e TZ=Asia/Taipei -v /volume1/docker/line-receipt-bot/deploy/data:/data --restart unless-stopped`,另加 health-cmd)。
+  SSH(管理員帳號 `yku-lca`,先到「控制台→終端機和 SNMP」啟用、用完關閉)執行:
+  `cd /volume1/docker/line-receipt-bot && sudo sh deploy/redeploy.sh`(重建映像、換掉 bot 容器、ngrok 不動,約 1～2 分鐘,LINE 短暫中斷;
+  腳本 `deploy\redeploy.sh` 須為 LF 換行)。實測 2026-11-26 通過。
   換金鑰:改 `bot.env` → `sudo docker restart line-receipt-bot`(只在啟動時讀環境變數)。
 - 看 log:`sudo docker logs -f line-receipt-bot`(ngrok 容器預設不輸出 log,空白正常)。驗證:POST 無簽章 `/callback` 回 400、LINE 傳單據走完流程。
 - **Windows 端已停用(備援)**:看門狗排程 `LineBotWatchdog` 已 Disable、開機 `LineReceiptBot.vbs` 備份在 `<code>\deploy\_windows_backup\`、本機 `.env`/使用者變數的金鑰仍在。
@@ -159,7 +159,11 @@
   **列出使用者近期 10 張單號做成快速回覆鈕**讓他點(點了送出該單號);② 閒置時**直接貼單號**也可
   (`handle_text` 用 `_parse_no` regex `(B[TS])[-\s]?\d{6,}` 認出)。貼出/點出單號 → `_start_append`。
   前綴決定表單/模式:**BT=差旅費(travel)、BS=代墊款(advance)**。
-- 近期單清單:`ragic.recent_records(本人金鑰, limit=10, applicant=本人姓名)` 合併撈差旅費+代墊款(各 GET 50 筆),
+- **只能追加「尚未送出簽核」或「被退回」的單**(2026-11-26):`ragic.can_append(rec)` 看「簽核狀態」欄——`N`(簽核情形「尚未送出簽核」)放行、
+  `R`/簽核情形含 退回·駁回·拒絕·否決·不核准 放行;`P`(簽核中)、`F`(簽核完成)擋掉。列表(`recent_records`)與**直接貼單號**(`find_record_by_no` 回 `can_append`/`approval`,
+  `_start_append` 擋下並說明目前簽核情形)都套用。⚠ 退回的狀態碼 R 與字樣是依 Ragic 慣例推定,資料中只見過 N、F,尚未用真實退回單驗證。
+  ⚠ Ragic `where` 用欄位**名稱**過濾無效(回空),故撈回後在程式端篩;預設新到舊,limit 放寬到 100。
+- 近期單清單:`ragic.recent_records(本人金鑰, limit=10, applicant=本人姓名)` 合併撈差旅費+代墊款(各 GET 100 筆),
   取單號數字部分由大到小(=新到舊),回 {expense_no,sheet,mode,project,date}。
   **用 `applicant` 依「申請人」欄位過濾 → 只列該人自己送的單**(即使共用/管理者金鑰看得到全部,也只顯示本人的)。
   `_offer_recent` 把它做成 QuickReply(每顆 label/text=單號,+ 取消;≤13 顆);查不到則請他直接貼單號。

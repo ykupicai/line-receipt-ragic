@@ -433,7 +433,9 @@ def find_record_by_no(expense_no: str, user_key: str = "") -> dict | None:
         if str(rec.get("費用單號", "")).strip().upper() == no:
             return {"sheet": sheet, "gid": gid, "attach": attach,
                     "ragic_id": rec.get("_ragicId") or rid, "expense_no": no, "mode": mode,
-                    "applicant": rec.get("申請人", ""), "project": rec.get("專案名稱", "")}
+                    "applicant": rec.get("申請人", ""), "project": rec.get("專案名稱", ""),
+                    "can_append": can_append(rec),
+                    "approval": str(rec.get("簽核情形", "") or "").strip()}
     return None
 
 
@@ -469,8 +471,21 @@ def append_advance(rows: list[dict], profile: dict, ragic_id: str) -> str:
                         sub_rows, profile.get("ragic_key", ""))
 
 
+_REJECT_WORDS = ("退回", "駁回", "拒絕", "否決", "不核准")
+
+
+def can_append(rec: dict) -> bool:
+    """可追加明細的單:尚未送出簽核(簽核狀態 N,簽核情形「尚未送出簽核」)或被退回(狀態 R / 情形含退回字樣)。
+    已送出/簽核中/簽核完成(狀態 P、F 等)的單不可再追加。
+    ※ 「退回」的狀態碼 R 與字樣是依 Ragic 慣例推定,資料中尚無實例可驗證(目前只見過 N、F)。
+    ※ where 以欄位名稱過濾無效(回空),故撈回後在程式端判斷;Ragic 預設新到舊,未送出的單必在近期。"""
+    st = str(rec.get("簽核狀態", "") or "").strip().upper()
+    info = str(rec.get("簽核情形", "") or "")
+    return st in ("N", "R") or "尚未送出" in info or any(w in info for w in _REJECT_WORDS)
+
+
 def recent_records(user_key: str = "", limit: int = 10, applicant: str = "") -> list[dict]:
-    """撈使用者近期的單(差旅費+代墊款合併,新到舊)。用本人金鑰 → 只看得到本人的單;
+    """撈使用者近期「尚未送出簽核」的單(差旅費+代墊款合併,新到舊)。用本人金鑰 → 只看得到本人的單;
     另用 applicant(申請人)過濾 → 即使是管理者金鑰也只列該人送的單。
     回傳 [{expense_no, sheet, mode, project, date}, ...]。查不到回空清單。"""
     key = user_key or RAGIC_API_KEY
@@ -480,7 +495,7 @@ def recent_records(user_key: str = "", limit: int = 10, applicant: str = "") -> 
         try:
             resp = requests.get(f"https://{RAGIC_SERVER}/{RAGIC_ACCOUNT}/{sheet}",
                                 headers={"Authorization": "Basic " + key},
-                                params={"api": "", "v": "3", "limit": 50}, timeout=60)
+                                params={"api": "", "v": "3", "limit": 100}, timeout=60)
             resp.raise_for_status()
             data = resp.json()
         except Exception:
@@ -495,6 +510,8 @@ def recent_records(user_key: str = "", limit: int = 10, applicant: str = "") -> 
                 continue
             if who and str(rec.get("申請人", "")).strip() != who:
                 continue                          # 只列指定申請人送的單
+            if not can_append(rec):
+                continue                          # 已送出簽核的單不列(不可再追加;退回單可)
             out.append({
                 "expense_no": no, "sheet": sheet, "mode": mode,
                 "project": str(rec.get("專案名稱", "") or "").strip(),
