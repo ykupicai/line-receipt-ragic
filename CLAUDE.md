@@ -19,7 +19,7 @@
   `references\台灣發票報帳對照.md`。
 - 健康檢查端點:`GET http://localhost:8000/` 回 `{"status":"ok"}`;`POST /callback` 無簽章應回 400。
 - log:`<code>\uvicorn.out.log`、`uvicorn.err.log`、`ngrok.out.log`、`ngrok.err.log`(每次重啟會被覆寫)。
-- 版控:`<code>` 為 git repo(2026-10-14 建立,僅本機、無遠端)。排除:`.env`、`users.json`、`ngrok_token.local`、`*.log`、`*.xlsx`、`.venv`,見「慣例與安全」。
+- 版控:`<code>` 為 git repo(2026-10-14 建立);2026-11-25 起遠端 `origin` = 私有 GitHub repo `ykupicai/line-receipt-ragic`(分支 main;因含內部網域與欄位資訊,**務必維持私有**)。排除:`.env`、`users.json`、`ngrok_token.local`、`*.log`、`*.xlsx`、`.venv`,見「慣例與安全」。
 - 自動化測試:無。驗證方式見本檔各節的「驗證」與「部署」。
 
 ### LINE 互動方式(問答式,目前)
@@ -229,10 +229,16 @@ Python 3.10+ / FastAPI + uvicorn / line-bot-sdk v3 / anthropic SDK / requests / 
   references/台灣發票報帳對照.md。金額常是手寫(如「9」易誤判),提示已要求逐位小心。
 
 ## 慣例與安全
-- 所有金鑰只放 `.env`,絕不寫進程式或 commit;`.env` 已列入 `.gitignore`。
+- **`ANTHROPIC_API_KEY`、共用 `RAGIC_API_KEY` 現存於 Windows「使用者環境變數」(2026-11-26 起),`.env` 已不放這兩項**
+  (`.env` 只剩 LINE 兩項與 RAGIC_SERVER/ACCOUNT/SHEET)。`load_dotenv()` 不覆蓋既有環境變數,所以**使用者變數優先於 `.env`**;
+  開機自動啟動與看門狗拉起時也讀使用者變數,不可刪。絕不寫進程式或 commit;`.env` 已列入 `.gitignore`。
   **例外**:ngrok authtoken 存 `<code>\ngrok_token.local`、每人 Ragic 金鑰明碼存 `users.json`——兩者都已排除在版控外,不可外傳。
-- 先前曾在聊天中貼過一批金鑰,視為已外流,務必到各平台 revoke/重發,新金鑰只放 `.env`。
-- Claude Code 自身登入(Claude 訂閱或 Console 額度)與 `.env` 的 `ANTHROPIC_API_KEY`(機器人辨識用)是兩回事,別混用。
+- 先前曾在聊天中貼過一批金鑰,視為已外流,務必到各平台 revoke/重發,新金鑰只放使用者變數(或 `users.json`)。
+- Claude Code 自身登入(Claude 訂閱或 Console 額度)與 `ANTHROPIC_API_KEY`(機器人辨識用)是兩回事,別混用。
+- **Claude 辨識金鑰 = 全公司共用一把**(同事只傳圖給 bot,不接觸金鑰;費用記在該金鑰所屬 Console 組織)。
+  2026-11-26 已改為 Console 組織 `ykupic`(Team 方案贈送額度)下建立的金鑰 `line-receipt-bot`(Default workspace)。
+  金鑰屬於建立它的組織、不能轉移;換組織＝在新組織重建金鑰。驗證:到 Console「Spending & usage」看用量出現在該組織。
+  Ragic 金鑰則**每人各自**(分權與建單署名),與 Claude 金鑰不同。
 
 ## Ragic 金鑰輪替 SOP(2026/09 踩過:重產金鑰後忘了同步 .env,bot 讀寫全失效)
 - ⚠️ **在 Ragic 重新產生 API 金鑰後,舊金鑰立刻失效,但不會回 401**——它變成 guest:
@@ -241,11 +247,16 @@ Python 3.10+ / FastAPI + uvicorn / line-bot-sdk v3 / anthropic SDK / requests / 
   → 幾乎確定是「金鑰失效(guest)」,先查對應金鑰。
 - **輪替步驟**:
   1. 在 Ragic(右上角名字 → 個人工具/Personal Settings)產生新的 API/HTTP API 金鑰。
-  2. 共用金鑰 → 貼進 `.env` 的 `RAGIC_API_KEY=`(存 UTF-8);個人金鑰 → 寫進 `users.json` 該人的 `ragic_key`
+  2. 共用金鑰 → 貼進 Windows 使用者環境變數 `RAGIC_API_KEY`(`.env` 不再放);個人金鑰 → 寫進 `users.json` 該人的 `ragic_key`
      (或請本人在 LINE 打「重新登記」到第④題貼上,較不外流)。
-  3. **跑 `restart_bot.ps1`**(uvicorn 只在啟動時載入 `.env`,不重啟不會生效)。
+  3. **重啟 bot**(uvicorn 只在啟動時載入環境變數,不重啟不會生效;終端機要新開或先從登錄檔重讀使用者變數,否則仍帶舊值)。
+     ⚠ 在 Claude 的 PowerShell 工具裡跑 `restart_bot.ps1` 會超過 2 分鐘被丟背景、最後 exit 255;
+     改為「停 :8000 → `Start-Process -WindowStyle Hidden powershell -File start_bot.ps1` → 等 ~12 秒 → 健康檢查」較穩。
   4. 驗證:讀 `invoice-form/2` 記錄數 > 0、LINE 打「更新專案」可比對數 > 0。
 - 別在對話/聊天貼金鑰(會留紀錄);一律由使用者自己填檔。
+- **個人金鑰也會失效(2026-11-26 實例)**:`users.json` 內林哲安、張竣翔的個人 Ragic 金鑰讀 `data-inquiry/3` 回 0 筆(吳依珊 126、共用 36),
+  症狀＝該使用者「搜尋不到專案」。處理:本人在 LINE 打「重新登記」到第④題貼新金鑰,或清空該人 `ragic_key` 暫用共用金鑰(只看得到共用帳號可見專案、建單掛共用帳號)。
+  診斷腳本思路:對每個 `users.json` 的 `ragic_key` 呼叫 `ragic.get_projects(key)`(先清 `_proj_cache`)看筆數,別印出金鑰。
 
 ## 給接手者的第一個任務
 先讀 `<code>\server.py`(收圖、辨識、問答、確認流程)與 `<code>\ragic.py`(Ragic 寫入,單張單據 = 一列明細)。
